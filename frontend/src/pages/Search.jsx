@@ -29,7 +29,7 @@ export default function Search() {
   return (
     <div>
       <div className="page-header">
-        <h1>Search Books</h1>
+        <h1>🔍 Search Books</h1>
       </div>
 
       <form className="search-bar" onSubmit={handleSearch}>
@@ -49,7 +49,7 @@ export default function Search() {
           placeholder="Filter by author"
         />
         <button type="submit" className="btn btn-primary" disabled={loading}>
-          {loading ? 'Searching...' : 'Search'}
+          {loading ? '⏳ Searching...' : '🔍 Search'}
         </button>
         {searched && (
           <button type="button" className="btn btn-cancel" onClick={handleClear}>Clear</button>
@@ -59,7 +59,7 @@ export default function Search() {
       {searched && (
         <div className="table-card">
           <div className="table-card-header">
-            {results.length} result{results.length !== 1 ? 's' : ''} found
+            🔎 {results.length} result{results.length !== 1 ? 's' : ''} found
           </div>
           {results.length === 0 ? (
             <p className="empty">No books matched your search.</p>
@@ -85,7 +85,7 @@ export default function Search() {
                     <td>{b.isbn}</td>
                     <td>
                       <span className={`badge ${b.is_available ? 'badge-green' : 'badge-orange'}`}>
-                        {b.is_available ? 'Available' : 'Borrowed'}
+                        {b.is_available ? '✅ Available' : '📤 Borrowed'}
                       </span>
                     </td>
                   </tr>

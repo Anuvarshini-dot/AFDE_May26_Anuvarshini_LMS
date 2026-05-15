@@ -43,9 +43,11 @@ def update_book(book_id: int, book: schemas.BookUpdate, db: Session = Depends(ge
 
 @app.delete("/books/{book_id}", response_model=schemas.BookOut)
 def delete_book(book_id: int, db: Session = Depends(get_db)):
-    deleted = crud.delete_book(db, book_id)
-    if not deleted:
+    deleted, status = crud.delete_book(db, book_id)
+    if status == "not_found":
         raise HTTPException(status_code=404, detail="Book not found")
+    if status == "active":
+        raise HTTPException(status_code=409, detail="Cannot delete book — it is currently borrowed")
     return deleted
 
 
@@ -68,9 +70,11 @@ def update_borrower(borrower_id: int, borrower: schemas.BorrowerUpdate, db: Sess
 
 @app.delete("/borrowers/{borrower_id}", response_model=schemas.BorrowerOut)
 def delete_borrower(borrower_id: int, db: Session = Depends(get_db)):
-    deleted = crud.delete_borrower(db, borrower_id)
-    if not deleted:
+    deleted, status = crud.delete_borrower(db, borrower_id)
+    if status == "not_found":
         raise HTTPException(status_code=404, detail="Borrower not found")
+    if status == "active":
+        raise HTTPException(status_code=409, detail="Cannot delete borrower — they currently hold a borrowed book")
     return deleted
 
 
@@ -124,8 +128,8 @@ def get_stats(db: Session = Depends(get_db)):
         "recent_transactions": [
             {
                 "id": t.id,
-                "book_title": t.book.title,
-                "borrower_name": t.borrower.name,
+                "book_title": t.book_title,
+                "borrower_name": t.borrower_name,
                 "borrow_date": str(t.borrow_date),
                 "return_date": str(t.return_date) if t.return_date else None,
                 "status": t.status,

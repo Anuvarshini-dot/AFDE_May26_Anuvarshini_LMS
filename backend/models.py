@@ -12,7 +12,7 @@ class Book(Base):
     isbn = Column(String, unique=True, nullable=False)
     is_available = Column(Boolean, default=True)
 
-    transactions = relationship("Transaction", back_populates="book")
+    transactions = relationship("Transaction", back_populates="book", passive_deletes=True)
 
 
 class Borrower(Base):
@@ -23,7 +23,7 @@ class Borrower(Base):
     contact_number = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
 
-    transactions = relationship("Transaction", back_populates="borrower")
+    transactions = relationship("Transaction", back_populates="borrower", passive_deletes=True)
 
 
 class Transaction(Base):
@@ -32,6 +32,8 @@ class Transaction(Base):
     id = Column(Integer, primary_key=True, index=True)
     book_id = Column(Integer, ForeignKey("books.id"), nullable=False)
     borrower_id = Column(Integer, ForeignKey("borrowers.id"), nullable=False)
+    book_title = Column(String, nullable=False)
+    borrower_name = Column(String, nullable=False)
     borrow_date = Column(Date, nullable=False)
     return_date = Column(Date, nullable=True)
     status = Column(String, default="borrowed")  # borrowed | returned

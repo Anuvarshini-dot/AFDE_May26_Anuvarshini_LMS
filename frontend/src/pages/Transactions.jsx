@@ -63,7 +63,7 @@ export default function Transactions() {
   return (
     <div>
       <div className="page-header">
-        <h1>Borrow / Return</h1>
+        <h1>🔄 Borrow / Return</h1>
       </div>
 
       {apiError && <p style={{ color: 'red', marginBottom: 12 }}>{apiError}</p>}
@@ -71,7 +71,7 @@ export default function Transactions() {
       <div className="txn-grid">
         {/* Borrow Form */}
         <div className="txn-card">
-          <h2>Borrow a Book</h2>
+          <h2>📤 Borrow a Book</h2>
           <form onSubmit={handleBorrow}>
             <div className="form-group">
               <label>Available Book</label>
@@ -95,7 +95,7 @@ export default function Transactions() {
 
         {/* Return Form */}
         <div className="txn-card">
-          <h2>Return a Book</h2>
+          <h2>↩️ Return a Book</h2>
           <form onSubmit={handleReturn}>
             <div className="form-group">
               <label>Active Transaction</label>
@@ -103,7 +103,7 @@ export default function Transactions() {
                 <option value="">-- Select Transaction --</option>
                 {activeTxns.map(t => (
                   <option key={t.id} value={t.id}>
-                    #{t.id} — {t.book.title} → {t.borrower.name}
+                    #{t.id} — {t.book_title || t.book?.title || 'Unknown'} → {t.borrower_name || t.borrower?.name || 'Unknown'}
                   </option>
                 ))}
               </select>
@@ -116,9 +116,9 @@ export default function Transactions() {
 
       {/* All Transactions */}
       <div className="table-card">
-        <div className="table-card-header">All Transactions</div>
+        <div className="table-card-header">📋 All Transactions</div>
         {transactions.length === 0 ? (
-          <p className="empty">No transactions yet.</p>
+          <p className="empty">📭 No transactions yet.</p>
         ) : (
           <table>
             <thead>
@@ -135,13 +135,13 @@ export default function Transactions() {
               {transactions.map(t => (
                 <tr key={t.id}>
                   <td>{t.id}</td>
-                  <td>{t.book.title}</td>
-                  <td>{t.borrower.name}</td>
+                  <td>{t.book_title || t.book?.title || 'Deleted Book'}</td>
+                  <td>{t.borrower_name || t.borrower?.name || 'Deleted Borrower'}</td>
                   <td>{t.borrow_date}</td>
                   <td>{t.return_date || '—'}</td>
                   <td>
                     <span className={`badge ${t.status === 'returned' ? 'badge-green' : 'badge-orange'}`}>
-                      {t.status}
+                      {t.status === 'returned' ? '✅ returned' : '📤 borrowed'}
                     </span>
                   </td>
                 </tr>

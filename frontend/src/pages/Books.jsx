@@ -10,6 +10,7 @@ export default function Books() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [errors, setErrors] = useState({})
   const [apiError, setApiError] = useState('')
+  const [showAvailableOnly, setShowAvailableOnly] = useState(false)
 
   const load = () => getBooks().then(res => setBooks(res.data)).catch(() => setApiError('Failed to load books.'))
 
@@ -44,22 +45,35 @@ export default function Books() {
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this book?')) return
-    await deleteBook(id)
-    load()
+    try {
+      await deleteBook(id)
+      load()
+    } catch (err) {
+      setApiError(err.response?.data?.detail || 'Failed to delete book.')
+    }
   }
+
+  const displayed = showAvailableOnly ? books.filter(b => b.is_available) : books
 
   return (
     <div>
       <div className="page-header">
-        <h1>Books</h1>
-        <button className="btn btn-primary" onClick={openAdd}>+ Add Book</button>
+        <h1>📖 Books</h1>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+          <label className="toggle-switch">
+            <input type="checkbox" checked={showAvailableOnly} onChange={e => setShowAvailableOnly(e.target.checked)} />
+            <span className="toggle-slider"></span>
+            <span className="toggle-label">📗 Available Only</span>
+          </label>
+          <button className="btn btn-primary" onClick={openAdd}>➕ Add Book</button>
+        </div>
       </div>
 
-      {apiError && <p style={{ color: 'red', marginBottom: 12 }}>{apiError}</p>}
+      {apiError && <p style={{ color: '#dc2626', marginBottom: 12 }}>{apiError}</p>}
 
       <div className="table-card">
-        {books.length === 0 ? (
-          <p className="empty">No books found. Add your first book!</p>
+        {displayed.length === 0 ? (
+          <p className="empty">{showAvailableOnly ? 'No available books right now.' : 'No books found. Add your first book!'}</p>
         ) : (
           <table>
             <thead>
@@ -74,7 +88,7 @@ export default function Books() {
               </tr>
             </thead>
             <tbody>
-              {books.map(b => (
+              {displayed.map(b => (
                 <tr key={b.id}>
                   <td>{b.id}</td>
                   <td>{b.title}</td>
@@ -83,7 +97,7 @@ export default function Books() {
                   <td>{b.isbn}</td>
                   <td>
                     <span className={`badge ${b.is_available ? 'badge-green' : 'badge-orange'}`}>
-                      {b.is_available ? 'Available' : 'Borrowed'}
+                      {b.is_available ? '✅ Available' : '📤 Borrowed'}
                     </span>
                   </td>
                   <td>

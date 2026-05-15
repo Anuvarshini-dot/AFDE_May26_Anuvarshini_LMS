@@ -44,22 +44,26 @@ export default function Borrowers() {
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this borrower?')) return
-    await deleteBorrower(id)
-    load()
+    try {
+      await deleteBorrower(id)
+      load()
+    } catch (err) {
+      setApiError(err.response?.data?.detail || 'Failed to delete borrower.')
+    }
   }
 
   return (
     <div>
       <div className="page-header">
-        <h1>Borrowers</h1>
-        <button className="btn btn-primary" onClick={openAdd}>+ Add Borrower</button>
+        <h1>👥 Borrowers</h1>
+        <button className="btn btn-primary" onClick={openAdd}>➕ Add Borrower</button>
       </div>
 
       {apiError && <p style={{ color: 'red', marginBottom: 12 }}>{apiError}</p>}
 
       <div className="table-card">
         {borrowers.length === 0 ? (
-          <p className="empty">No borrowers yet. Add your first borrower!</p>
+          <p className="empty">📭 No borrowers yet. Add your first borrower!</p>
         ) : (
           <table>
             <thead>
@@ -94,7 +98,7 @@ export default function Borrowers() {
       {showModal && (
         <div className="modal-overlay">
           <div className="modal">
-            <h2>{editing ? 'Edit Borrower' : 'Add Borrower'}</h2>
+            <h2>{editing ? '✏️ Edit Borrower' : '➕ Add Borrower'}</h2>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label>Name</label>

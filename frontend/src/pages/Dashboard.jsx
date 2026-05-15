@@ -11,43 +11,43 @@ export default function Dashboard() {
       .catch(() => setError('Failed to load stats. Is the backend running?'))
   }, [])
 
-  if (error) return <p style={{ color: 'red' }}>{error}</p>
-  if (!stats) return <p>Loading...</p>
+  if (error) return <p style={{ color: '#dc2626', padding: 24 }}>⚠️ {error}</p>
+  if (!stats) return <p style={{ padding: 24, color: '#92400e' }}>⏳ Loading...</p>
 
   return (
     <div>
       <div className="page-header">
-        <h1>Dashboard</h1>
+        <h1>🏠 Dashboard</h1>
       </div>
 
       <div className="stat-grid">
         <div className="stat-card">
-          <div className="label">Total Books</div>
+          <div className="label">📚 Total Books</div>
           <div className="value">{stats.total_books}</div>
         </div>
         <div className="stat-card available">
-          <div className="label">Available</div>
+          <div className="label">✅ Available</div>
           <div className="value">{stats.available_books}</div>
         </div>
         <div className="stat-card borrowed">
-          <div className="label">Borrowed</div>
+          <div className="label">📤 Borrowed</div>
           <div className="value">{stats.borrowed_books}</div>
         </div>
       </div>
 
       <div className="table-card">
-        <div className="table-card-header">Recent Transactions</div>
+        <div className="table-card-header">🕐 Recent Transactions</div>
         {stats.recent_transactions.length === 0 ? (
-          <p className="empty">No transactions yet.</p>
+          <p className="empty">📭 No transactions yet.</p>
         ) : (
           <table>
             <thead>
               <tr>
                 <th>#</th>
-                <th>Book</th>
-                <th>Borrower</th>
-                <th>Borrow Date</th>
-                <th>Return Date</th>
+                <th>📖 Book</th>
+                <th>👤 Borrower</th>
+                <th>📅 Borrow Date</th>
+                <th>📅 Return Date</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -61,7 +61,7 @@ export default function Dashboard() {
                   <td>{t.return_date || '—'}</td>
                   <td>
                     <span className={`badge ${t.status === 'returned' ? 'badge-green' : 'badge-orange'}`}>
-                      {t.status}
+                      {t.status === 'returned' ? '✅ returned' : '📤 borrowed'}
                     </span>
                   </td>
                 </tr>

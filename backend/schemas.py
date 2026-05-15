@@ -64,11 +64,13 @@ class TransactionOut(BaseModel):
     id: int
     book_id: int
     borrower_id: int
+    book_title: Optional[str] = None
+    borrower_name: Optional[str] = None
     borrow_date: date
     return_date: Optional[date] = None
     status: str
-    book: BookOut
-    borrower: BorrowerOut
+    book: Optional[BookOut] = None
+    borrower: Optional[BorrowerOut] = None
 
     class Config:
         from_attributes = True

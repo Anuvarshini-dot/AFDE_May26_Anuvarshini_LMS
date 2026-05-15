@@ -32,10 +32,16 @@ def update_book(db: Session, book_id: int, book: schemas.BookUpdate):
 def delete_book(db: Session, book_id: int):
     db_book = get_book(db, book_id)
     if not db_book:
-        return None
+        return None, "not_found"
+    has_active = db.query(models.Transaction).filter(
+        models.Transaction.book_id == book_id,
+        models.Transaction.status == "borrowed"
+    ).first() is not None
+    if has_active:
+        return None, "active"
     db.delete(db_book)
     db.commit()
-    return db_book
+    return db_book, "ok"
 
 
 # ── Borrowers ─────────────────────────────────────────────────────────────────
@@ -66,10 +72,16 @@ def update_borrower(db: Session, borrower_id: int, borrower: schemas.BorrowerUpd
 def delete_borrower(db: Session, borrower_id: int):
     db_borrower = get_borrower(db, borrower_id)
     if not db_borrower:
-        return None
+        return None, "not_found"
+    has_active = db.query(models.Transaction).filter(
+        models.Transaction.borrower_id == borrower_id,
+        models.Transaction.status == "borrowed"
+    ).first() is not None
+    if has_active:
+        return None, "active"
     db.delete(db_borrower)
     db.commit()
-    return db_borrower
+    return db_borrower, "ok"
 
 
 # ── Transactions ──────────────────────────────────────────────────────────────
@@ -81,10 +93,15 @@ def borrow_book(db: Session, req: schemas.BorrowRequest):
     book = get_book(db, req.book_id)
     if not book or not book.is_available:
         return None
+    borrower = get_borrower(db, req.borrower_id)
+    if not borrower:
+        return None
     book.is_available = False
     txn = models.Transaction(
         book_id=req.book_id,
         borrower_id=req.borrower_id,
+        book_title=book.title,
+        borrower_name=borrower.name,
         borrow_date=date.today(),
         status="borrowed"
     )
