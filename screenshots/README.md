@@ -1,30 +1,23 @@
 # Screenshots
 
-Add your application screenshots to this folder before final submission.
+This folder contains UI screenshots of the Library Management System application.
 
-## Required Screenshots
+## Screenshots
 
-| Screenshot | Filename (suggested)         |
-|------------|------------------------------|
-| Dashboard view | `01_dashboard.png` |
-| Books list page | `02_books_list.png` |
-| Add book form | `03_add_book.png` |
-| Edit book form | `04_edit_book.png` |
-| Delete book confirmation | `05_delete_book.png` |
-| Borrowers list page | `06_borrowers_list.png` |
-| Add borrower form | `07_add_borrower.png` |
-| Transactions page | `08_transactions.png` |
-| Borrow book form | `09_borrow_book.png` |
-| Return book form | `10_return_book.png` |
-| Search / filter results | `11_search_results.png` |
-| Postman — GET /books | `12_postman_get_books.png` |
-| Postman — POST /borrow | `13_postman_borrow.png` |
-| Postman — GET /stats | `14_postman_stats.png` |
+| # | Screenshot | Filename |
+|---|------------|----------|
+| 1 | Initial Dashboard view | `01_Initial_Dashboard.png` |
+| 2 | Add Book page | `02_Add_books_page.png` |
+| 3 | Initial list of books | `03_Initial_list_of_books.png` |
+| 4 | Book list page | `04_list_book_page.png` |
+| 5 | Borrowers list page | `05_list_browers_page.png` |
+| 6 | Add Borrower page | `06_add_browers_page.png` |
+| 7 | Transactions — Borrow & Return page | `07_transaction_borrow_return_page.png` |
+| 8 | Search page | `08_search_page.png` |
+| 9 | Dashboard page | `09_dashboard_page.png` |
 
-## How to Take Screenshots
+## How to Run the Application
 
 1. Start backend: `cd backend && uvicorn main:app --reload`
 2. Start frontend: `cd frontend && npm run dev`
 3. Open `http://localhost:5173` in your browser
-4. Navigate to each page and capture a screenshot
-5. For Postman screenshots, test each endpoint and capture the request + response
