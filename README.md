@@ -155,14 +155,17 @@ Full request/response examples are in [docs/API_DOCUMENTATION.md](docs/API_DOCUM
 
 ## Screenshots
 
-Screenshots are available in the [screenshots/](screenshots/) folder, including:
+Screenshots are available in the [screenshots/](screenshots/) folder.
 
-- Dashboard view
-- Books management (list, add, edit, delete)
-- Borrowers management
-- Borrow & Return transactions
-- Search and filter results
-- API testing via Postman
+| # | Screenshot | File |
+|---|------------|------|
+| 1 | Dashboard with stats and recent transactions | `01_Dashboard_page.png` |
+| 2 | Books list with availability filter toggle | `02_Books_page.png` |
+| 3 | Add Book modal form | `03_Add_book_page.png` |
+| 4 | Borrowers list | `04_Borrowers_page.png` |
+| 5 | Add Borrower modal form | `05_Add_borrowers_page.png` |
+| 6 | Borrow / Return transactions page | `06_Borrow_return_page.png` |
+| 7 | Search books by title, author, or category | `07_Search_book_page.png` |
 
 ---
 
