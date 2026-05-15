@@ -1,0 +1,917 @@
+================================================================================
+           LIBRARY MANAGEMENT SYSTEM — BACKEND DOCUMENTATION
+================================================================================
+
+
+TABLE OF CONTENTS
+-----------------
+1. Project Overview
+2. Technology Stack
+3. File Structure
+4. File-by-File Explanation
+   4.1  database.py
+   4.2  models.py
+   4.3  schemas.py
+   4.4  crud.py
+   4.5  main.py
+5. End-to-End Flow by Category
+   5.1  Book Management
+   5.2  Borrower Management
+   5.3  Borrow Book
+   5.4  Return Book
+   5.5  Search
+   5.6  Dashboard Stats
+
+
+================================================================================
+1. PROJECT OVERVIEW
+================================================================================
+
+The backend is a REST API built with FastAPI and SQLite. It exposes endpoints
+for managing books, borrowers, and borrow/return transactions. The application
+follows a clean, layered architecture where each file has a single, well-defined
+responsibility.
+
+When an HTTP request arrives, it travels through these layers in order:
+
+    HTTP Request
+         |
+         v
+    main.py       — receives request, validates input, delegates to crud
+         |
+         v
+    crud.py       — performs the actual database operation using models
+         |
+         v
+    models.py     — defines the database table structure
+         |
+         v
+    database.py   — manages the SQLite connection and session
+
+
+================================================================================
+2. TECHNOLOGY STACK
+================================================================================
+
+FastAPI        — Web framework for building REST APIs. It automatically
+                 generates API documentation, handles routing, and integrates
+                 with Pydantic for validation.
+
+SQLAlchemy     — ORM (Object Relational Mapper). Lets you interact with the
+                 database using Python classes and objects instead of writing
+                 raw SQL queries.
+
+SQLite         — A lightweight, file-based database. All data is stored in a
+                 single file called library.db in the backend folder.
+
+Pydantic       — Data validation library. Defines what shape data must have
+                 when entering or leaving the API. Automatically rejects
+                 malformed requests.
+
+Uvicorn        — ASGI server that runs the FastAPI application.
+
+
+================================================================================
+3. FILE STRUCTURE
+================================================================================
+
+backend/
+|-- database.py       Database connection and session management
+|-- models.py         SQLAlchemy table definitions
+|-- schemas.py        Pydantic models for request/response validation
+|-- crud.py           All database operations (Create, Read, Update, Delete)
+|-- main.py           FastAPI app entry point, all routes, CORS config
+|-- requirements.txt  Python package dependencies
+
+
+================================================================================
+4. FILE-BY-FILE EXPLANATION
+================================================================================
+
+
+--------------------------------------------------------------------------------
+4.1  database.py
+--------------------------------------------------------------------------------
+
+PURPOSE:
+Sets up the connection to the SQLite database and provides a session factory
+that the rest of the application uses to talk to the database.
+
+CODE WALKTHROUGH:
+
+    DATABASE_URL = "sqlite:///./library.db"
+
+This is the connection string. "sqlite:///" means use SQLite. "./library.db"
+means the database file will be created in the current directory (the backend
+folder) with the name library.db.
+
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+
+The engine is the core SQLAlchemy object that manages the connection to the
+database. "check_same_thread": False is required specifically for SQLite because
+FastAPI is asynchronous and may handle requests across multiple threads. Without
+this flag, SQLite would raise an error when accessed from different threads.
+
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+SessionLocal is a factory — calling it creates a new database session. A session
+is like an ongoing conversation with the database.
+
+autocommit=False means changes are NOT automatically saved. You must explicitly
+call db.commit() to persist data. This gives you control over when data is
+actually written.
+
+autoflush=False means SQLAlchemy will not automatically synchronize pending
+changes with the database before queries. This avoids unexpected behavior.
+
+    Base = declarative_base()
+
+Base is the parent class that all table models will inherit from. It registers
+models with SQLAlchemy so it knows what tables exist.
+
+    def get_db():
+        db = SessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+This is a dependency injection generator used by FastAPI. When a route function
+needs a database session, FastAPI calls get_db(). The function opens a new
+session, yields it to the route function, and after the route finishes (whether
+successfully or with an error), db.close() is always called to release the
+connection. This pattern guarantees no sessions are left open accidentally.
+
+
+--------------------------------------------------------------------------------
+4.2  models.py
+--------------------------------------------------------------------------------
+
+PURPOSE:
+Defines the structure of the database tables as Python classes. Each class
+represents one table, and each attribute represents one column. SQLAlchemy uses
+these classes to generate and execute SQL queries.
+
+There are three tables: books, borrowers, and transactions.
+
+
+BOOK MODEL
+
+    class Book(Base):
+        __tablename__ = "books"
+
+        id           = Column(Integer, primary_key=True, index=True)
+        title        = Column(String, nullable=False)
+        author       = Column(String, nullable=False)
+        category     = Column(String, nullable=False)
+        isbn         = Column(String, unique=True, nullable=False)
+        is_available = Column(Boolean, default=True)
+
+        transactions = relationship("Transaction", back_populates="book")
+
+id            — Auto-incrementing integer. The primary key uniquely identifies
+                each row. index=True adds a database index for faster lookups.
+
+title         — The book's title. nullable=False means this column cannot be
+                empty; the database will reject a row without a title.
+
+author        — Name of the author. Required.
+
+category      — Genre or subject area (e.g. Fiction, Science, Programming).
+
+isbn          — International Standard Book Number. unique=True means no two
+                books can have the same ISBN. Required.
+
+is_available  — Boolean flag. True means the book is on the shelf and can be
+                borrowed. False means it is currently with a borrower. Defaults
+                to True when a book is first added.
+
+transactions  — This is NOT a database column. It is a virtual relationship that
+                lets you access all transactions linked to a book by doing
+                book.transactions in Python. SQLAlchemy handles the JOIN behind
+                the scenes.
+
+
+BORROWER MODEL
+
+    class Borrower(Base):
+        __tablename__ = "borrowers"
+
+        id             = Column(Integer, primary_key=True, index=True)
+        name           = Column(String, nullable=False)
+        contact_number = Column(String, nullable=False)
+        email          = Column(String, unique=True, nullable=False)
+
+        transactions   = relationship("Transaction", back_populates="borrower")
+
+id             — Auto-incrementing primary key.
+name           — Full name of the borrower. Required.
+contact_number — Phone number. Required.
+email          — Email address. unique=True prevents the same person from being
+                 registered twice with the same email. Required.
+
+transactions   — Virtual relationship to all transactions made by this borrower.
+
+
+TRANSACTION MODEL
+
+    class Transaction(Base):
+        __tablename__ = "transactions"
+
+        id          = Column(Integer, primary_key=True, index=True)
+        book_id     = Column(Integer, ForeignKey("books.id"), nullable=False)
+        borrower_id = Column(Integer, ForeignKey("borrowers.id"), nullable=False)
+        borrow_date = Column(Date, nullable=False)
+        return_date = Column(Date, nullable=True)
+        status      = Column(String, default="borrowed")
+
+        book     = relationship("Book", back_populates="transactions")
+        borrower = relationship("Borrower", back_populates="transactions")
+
+id          — Auto-incrementing primary key.
+
+book_id     — Foreign Key linking to the books table. ForeignKey("books.id")
+              means this value must correspond to an existing id in the books
+              table. The database enforces this — you cannot create a transaction
+              for a book that doesn't exist.
+
+borrower_id — Foreign Key linking to the borrowers table. Same constraint.
+
+borrow_date — The date on which the book was borrowed. Set automatically to
+              today's date when a borrow action occurs.
+
+return_date — The date the book was returned. This is nullable=True meaning it
+              is allowed to be empty (NULL in the database). While the book is
+              still borrowed, this field is NULL. It is only filled when the
+              book is returned.
+
+status      — A text field that is either "borrowed" or "returned". Defaults to
+              "borrowed" when the transaction is created.
+
+book        — Virtual relationship. transaction.book gives you the full Book
+              object without needing to write a JOIN query.
+
+borrower    — Virtual relationship. transaction.borrower gives you the full
+              Borrower object.
+
+
+--------------------------------------------------------------------------------
+4.3  schemas.py
+--------------------------------------------------------------------------------
+
+PURPOSE:
+Defines Pydantic models that act as contracts for the API. They control exactly
+what data the API accepts from clients (request schemas) and exactly what data
+the API sends back (response schemas).
+
+These are intentionally separate from the database models in models.py. The
+database model represents the full table structure including internal fields.
+The schema represents only what should be visible or editable through the API.
+
+
+BOOK SCHEMAS
+
+BookCreate — Used when adding a new book (POST /books).
+
+    class BookCreate(BaseModel):
+        title: str
+        author: str
+        category: str
+        isbn: str
+
+Only four fields are required. The id is not included because the database
+assigns it automatically. is_available is not included because it always
+defaults to True for a new book — there is no reason for the client to set it.
+
+BookUpdate — Used when editing an existing book (PUT /books/{id}).
+
+    class BookUpdate(BaseModel):
+        title:    Optional[str] = None
+        author:   Optional[str] = None
+        category: Optional[str] = None
+        isbn:     Optional[str] = None
+
+All fields are Optional with a default of None. This enables partial updates —
+the client only needs to send the fields they want to change. For example,
+sending just {"title": "New Title"} will update only the title and leave all
+other fields unchanged.
+
+BookOut — Used as the response shape whenever a book is returned from the API.
+
+    class BookOut(BaseModel):
+        id:           int
+        title:        str
+        author:       str
+        category:     str
+        isbn:         str
+        is_available: bool
+
+        class Config:
+            from_attributes = True
+
+from_attributes = True tells Pydantic to read values from SQLAlchemy model
+object attributes (e.g. book.title) rather than expecting a plain dictionary.
+This is required for converting SQLAlchemy query results into Pydantic responses.
+
+
+BORROWER SCHEMAS
+
+BorrowerCreate — Used when adding a borrower (POST /borrowers).
+
+    class BorrowerCreate(BaseModel):
+        name:           str
+        contact_number: str
+        email:          EmailStr
+
+EmailStr is a special Pydantic type that validates email format automatically.
+If the client sends an invalid email like "notanemail", Pydantic rejects the
+request with a 422 error before the code even runs.
+
+BorrowerUpdate — Used for editing (PUT /borrowers/{id}).
+All fields Optional for partial updates, same pattern as BookUpdate.
+
+BorrowerOut — Response shape for borrower data. Includes id, name,
+contact_number, and email.
+
+
+TRANSACTION SCHEMAS
+
+BorrowRequest — Input for the borrow endpoint.
+
+    class BorrowRequest(BaseModel):
+        book_id:     int
+        borrower_id: int
+
+The client sends only the IDs. The server looks up the actual records and
+handles everything else (setting the date, creating the transaction, etc.).
+
+ReturnRequest — Input for the return endpoint.
+
+    class ReturnRequest(BaseModel):
+        transaction_id: int
+
+The client sends the transaction ID to mark as returned.
+
+TransactionOut — Response when a transaction is returned from the API.
+
+    class TransactionOut(BaseModel):
+        id:          int
+        book_id:     int
+        borrower_id: int
+        borrow_date: date
+        return_date: Optional[date] = None
+        status:      str
+        book:        BookOut
+        borrower:    BorrowerOut
+
+The book and borrower fields are nested objects — the full book and borrower
+data is embedded inside the transaction response. This works because the
+relationships in models.py allow SQLAlchemy to load related objects, and Pydantic
+serializes them using the BookOut and BorrowerOut schemas.
+
+
+--------------------------------------------------------------------------------
+4.4  crud.py
+--------------------------------------------------------------------------------
+
+PURPOSE:
+Contains every database operation in the application. CRUD stands for Create,
+Read, Update, Delete. This is the only file that directly queries the database,
+which keeps a clean separation between API routing logic and data access logic.
+
+All functions accept db: Session as their first parameter. This session is
+provided by the get_db() dependency injected by FastAPI.
+
+
+BOOKS
+
+get_books(db)
+    Fetches all rows from the books table.
+    db.query(models.Book) builds a SELECT * FROM books query.
+    .all() executes it and returns a Python list of Book objects.
+
+get_book(db, book_id)
+    Fetches a single book by its ID.
+    .filter(models.Book.id == book_id) adds a WHERE id = ? clause.
+    .first() returns the first (and only) result, or None if not found.
+
+create_book(db, book)
+    book is a BookCreate Pydantic object.
+    book.model_dump() converts it to a plain dict: {"title": ..., "author": ...}
+    models.Book(**book.model_dump()) unpacks the dict into the Book constructor.
+    db.add(db_book) stages the new record (in-memory, not yet on disk).
+    db.commit() writes the transaction permanently to the database.
+    db.refresh(db_book) re-reads the saved record from the database to get
+    the auto-generated id and default values like is_available=True.
+    Returns the saved Book object.
+
+update_book(db, book_id, book)
+    Fetches the existing book. If not found, returns None.
+    book.model_dump(exclude_none=True) produces only the fields that were sent
+    in the request (None fields are excluded).
+    setattr(db_book, field, value) dynamically sets each field on the object.
+    Only the provided fields are updated — others remain unchanged.
+    db.commit() saves the changes. db.refresh() reloads the updated state.
+
+delete_book(db, book_id)
+    Fetches the book. If not found, returns None.
+    db.delete(db_book) marks it for deletion.
+    db.commit() permanently removes it from the database.
+    Returns the deleted book object (so the API can confirm what was deleted).
+
+
+BORROWERS
+
+get_borrowers, get_borrower, create_borrower, update_borrower, delete_borrower
+follow the exact same pattern as the book functions above, operating on the
+Borrower model instead of the Book model.
+
+
+TRANSACTIONS
+
+borrow_book(db, req)
+    req is a BorrowRequest object containing book_id and borrower_id.
+
+    Step 1: Fetch the book using get_book().
+    Step 2: Check if the book exists. If not, return None.
+    Step 3: Check if book.is_available is True. If False, return None.
+    Step 4: Set book.is_available = False (mark as unavailable).
+    Step 5: Create a new Transaction object with:
+              book_id = req.book_id
+              borrower_id = req.borrower_id
+              borrow_date = today's date (from Python's date.today())
+              status = "borrowed"
+    Step 6: db.add(txn) -> db.commit() -> db.refresh(txn)
+    Step 7: Return the transaction.
+
+    Both the book update and the transaction insert happen in a single db.commit()
+    call, meaning they succeed or fail together (atomic operation).
+
+return_book(db, req)
+    req is a ReturnRequest object containing transaction_id.
+
+    Step 1: Fetch the transaction by its id.
+    Step 2: If not found, return None.
+    Step 3: If txn.status is already "returned", return None (prevents
+            returning the same book twice).
+    Step 4: Set txn.return_date = today's date.
+    Step 5: Set txn.status = "returned".
+    Step 6: Fetch the associated book using txn.book_id.
+    Step 7: Set book.is_available = True (mark as available again).
+    Step 8: db.commit() -> db.refresh(txn)
+    Step 9: Return the updated transaction.
+
+    Both the transaction update and book update happen in a single commit.
+
+
+SEARCH
+
+search_books(db, q, category, author)
+    All three parameters are optional (default None).
+
+    Starts with the base query: db.query(models.Book)
+
+    If q is provided:
+        Adds a filter that checks title, author, AND category columns
+        using OR logic. So if q = "python", a book matches if "python"
+        appears in any of those three columns.
+        ilike() performs case-insensitive matching.
+        The "%" wildcards on both sides mean partial matching — "python"
+        matches "Python Programming", "Learning Python", etc.
+
+    If category is provided:
+        Adds an AND filter on the category column using ilike.
+
+    If author is provided:
+        Adds an AND filter on the author column using ilike.
+
+    Filters are only added if the parameter was actually provided. If none
+    are provided, all books are returned. The query object is built
+    incrementally and executed with .all() at the end.
+
+
+--------------------------------------------------------------------------------
+4.5  main.py
+--------------------------------------------------------------------------------
+
+PURPOSE:
+The entry point of the entire backend application. Creates the FastAPI app,
+configures middleware, and defines all HTTP route handlers. It acts as the
+bridge between incoming HTTP requests and the crud.py functions.
+
+STARTUP BEHAVIOR
+
+    models.Base.metadata.create_all(bind=engine)
+
+This line runs once when the application starts. SQLAlchemy checks the database
+and creates any tables that don't already exist based on the models in models.py.
+If the tables already exist, nothing happens. This is why you never need to run
+a separate database migration script — the schema is created automatically.
+
+CORS MIDDLEWARE
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+CORS (Cross-Origin Resource Sharing) is a browser security rule. When the React
+frontend (running on port 5173) makes a request to the FastAPI backend (running
+on port 8000), the browser blocks it because the ports are different — it
+considers them different "origins". This middleware instructs the browser to
+allow requests from localhost:5173, solving the problem.
+
+ROUTE HANDLER STRUCTURE
+
+Every route follows the same structure. Example:
+
+    @app.get("/books/{book_id}", response_model=schemas.BookOut)
+    def get_book(book_id: int, db: Session = Depends(get_db)):
+        book = crud.get_book(db, book_id)
+        if not book:
+            raise HTTPException(status_code=404, detail="Book not found")
+        return book
+
+@app.get(...)       — Decorator that registers this function as the handler
+                     for GET requests at /books/{book_id}.
+
+response_model      — Tells FastAPI which Pydantic schema to use when
+                     serializing the return value. Extra fields from the
+                     SQLAlchemy object that are not in BookOut are stripped.
+
+book_id: int        — FastAPI extracts the {book_id} segment from the URL
+                     and automatically converts it to an integer.
+
+Depends(get_db)     — FastAPI calls get_db() before the function runs and
+                     injects the session as db. The route never manages the
+                     session lifecycle manually.
+
+HTTPException       — If crud returns None (record not found), this raises
+                     an HTTP error with the given status code and message.
+                     FastAPI converts this into a proper JSON error response.
+
+STATS ENDPOINT
+
+    @app.get("/stats")
+    def get_stats(db: Session = Depends(get_db)):
+
+This endpoint does not declare a response_model because it returns a custom
+dictionary, not a single Pydantic model. It calculates total books, available
+books, and borrowed books by counting the results from crud, and returns
+the 5 most recent transactions sorted by borrow date.
+
+
+================================================================================
+5. END-TO-END FLOW BY CATEGORY
+================================================================================
+
+
+--------------------------------------------------------------------------------
+5.1  BOOK MANAGEMENT FLOW
+--------------------------------------------------------------------------------
+
+ADD A BOOK  (POST /books)
+---------------------------
+
+Client sends:
+    POST http://localhost:8000/books
+    Body: { "title": "Clean Code", "author": "Robert Martin",
+            "category": "Programming", "isbn": "9780132350884" }
+
+Step 1 — main.py receives the request.
+    FastAPI reads the request body and passes it through BookCreate schema.
+    Pydantic checks that all four fields are present and are strings.
+    If validation fails (e.g. missing title), FastAPI immediately responds
+    with 422 Unprocessable Entity — no code in crud.py runs.
+    If valid, a database session is created via Depends(get_db).
+    crud.create_book(db, book) is called.
+
+Step 2 — crud.py: create_book()
+    book.model_dump() converts the schema to:
+        {"title": "Clean Code", "author": "Robert Martin",
+         "category": "Programming", "isbn": "9780132350884"}
+    models.Book(**...) creates a Book object in memory.
+    is_available defaults to True (defined in the model).
+    db.add() stages the record.
+    db.commit() writes it to library.db.
+    db.refresh() fetches the saved record including the auto-assigned id.
+    Returns the Book object.
+
+Step 3 — main.py returns the result.
+    FastAPI serializes the Book object using BookOut schema.
+    Responds with HTTP 201 Created.
+
+Response:
+    { "id": 1, "title": "Clean Code", "author": "Robert Martin",
+      "category": "Programming", "isbn": "9780132350884", "is_available": true }
+
+
+UPDATE A BOOK  (PUT /books/{id})
+---------------------------------
+
+Client sends:
+    PUT http://localhost:8000/books/1
+    Body: { "title": "Clean Code (2nd Edition)" }
+
+Step 1 — main.py
+    Validates body against BookUpdate (all fields Optional).
+    Calls crud.update_book(db, 1, book).
+
+Step 2 — crud.py: update_book()
+    Fetches the book with id=1.
+    If not found, returns None → main.py raises 404.
+    model_dump(exclude_none=True) produces: {"title": "Clean Code (2nd Edition)"}
+    setattr updates only the title on the existing object.
+    db.commit() saves the change.
+    Returns the updated Book object.
+
+Response:
+    HTTP 200 OK with the full updated book object.
+
+
+DELETE A BOOK  (DELETE /books/{id})
+-------------------------------------
+
+Client sends:
+    DELETE http://localhost:8000/books/1
+
+Step 1 — main.py
+    Calls crud.delete_book(db, 1).
+
+Step 2 — crud.py: delete_book()
+    Fetches the book with id=1.
+    If not found, returns None → main.py raises 404.
+    db.delete() marks it for deletion.
+    db.commit() removes it permanently.
+    Returns the deleted book object.
+
+Response:
+    HTTP 200 OK with the deleted book data.
+
+
+GET ALL BOOKS  (GET /books)
+----------------------------
+
+Client sends:
+    GET http://localhost:8000/books
+
+Step 1 — main.py
+    Calls crud.get_books(db).
+
+Step 2 — crud.py: get_books()
+    Runs SELECT * FROM books.
+    Returns a list of all Book objects.
+
+Response:
+    HTTP 200 OK with an array of all books.
+
+
+--------------------------------------------------------------------------------
+5.2  BORROWER MANAGEMENT FLOW
+--------------------------------------------------------------------------------
+
+ADD A BORROWER  (POST /borrowers)
+-----------------------------------
+
+Client sends:
+    POST http://localhost:8000/borrowers
+    Body: { "name": "Alice", "contact_number": "9876543210",
+            "email": "alice@example.com" }
+
+Step 1 — main.py
+    Validates body against BorrowerCreate.
+    EmailStr validation runs automatically. If the email is not in a valid
+    format, Pydantic rejects with 422 before crud is ever called.
+    Calls crud.create_borrower(db, borrower).
+
+Step 2 — crud.py: create_borrower()
+    Creates a Borrower object from the dict.
+    db.add() -> db.commit() -> db.refresh()
+    Returns the saved borrower with its generated id.
+
+Response:
+    HTTP 201 Created
+    { "id": 1, "name": "Alice", "contact_number": "9876543210",
+      "email": "alice@example.com" }
+
+
+UPDATE A BORROWER  (PUT /borrowers/{id})
+-----------------------------------------
+
+Same pattern as updating a book. Only the provided fields are changed.
+If the borrower id does not exist, a 404 is returned.
+
+
+DELETE A BORROWER  (DELETE /borrowers/{id})
+--------------------------------------------
+
+Same pattern as deleting a book.
+If the borrower id does not exist, a 404 is returned.
+
+
+--------------------------------------------------------------------------------
+5.3  BORROW BOOK FLOW
+--------------------------------------------------------------------------------
+
+Client sends:
+    POST http://localhost:8000/borrow
+    Body: { "book_id": 1, "borrower_id": 1 }
+
+Step 1 — main.py
+    Validates body against BorrowRequest.
+    Calls crud.borrow_book(db, req).
+
+Step 2 — crud.py: borrow_book()
+
+    CHECK 1: Fetch the book with book_id=1.
+             If book not found → return None.
+             main.py receives None → raises 400 "Book not available or not found"
+
+    CHECK 2: Check book.is_available.
+             If False (book already borrowed by someone else) → return None.
+             main.py receives None → raises 400 "Book not available or not found"
+
+    If both checks pass:
+        Set book.is_available = False
+        Create a new Transaction:
+            book_id     = 1
+            borrower_id = 1
+            borrow_date = today's date (e.g. 2026-05-13)
+            return_date = NULL
+            status      = "borrowed"
+        db.add(txn) -> db.commit() -> db.refresh(txn)
+
+    Both the book update and the new transaction row are saved in one commit.
+    If anything fails, both changes are rolled back together.
+
+Step 3 — main.py
+    Serializes the transaction using TransactionOut.
+    The nested book and borrower objects are loaded via SQLAlchemy relationships.
+
+Response:
+    HTTP 201 Created
+    {
+      "id": 1,
+      "book_id": 1,
+      "borrower_id": 1,
+      "borrow_date": "2026-05-13",
+      "return_date": null,
+      "status": "borrowed",
+      "book": { "id": 1, "title": "Clean Code", ..., "is_available": false },
+      "borrower": { "id": 1, "name": "Alice", ... }
+    }
+
+What changed in the database:
+    books table:        row id=1, is_available changed from true to false
+    transactions table: new row inserted with status="borrowed", return_date=NULL
+
+
+--------------------------------------------------------------------------------
+5.4  RETURN BOOK FLOW
+--------------------------------------------------------------------------------
+
+Client sends:
+    POST http://localhost:8000/return
+    Body: { "transaction_id": 1 }
+
+Step 1 — main.py
+    Validates body against ReturnRequest.
+    Calls crud.return_book(db, req).
+
+Step 2 — crud.py: return_book()
+
+    CHECK 1: Fetch the transaction with id=1.
+             If not found → return None.
+             main.py raises 400 "Transaction not found or already returned"
+
+    CHECK 2: Check txn.status.
+             If already "returned" → return None.
+             This prevents a book from being returned twice.
+
+    If both checks pass:
+        Set txn.return_date = today's date (e.g. 2026-05-20)
+        Set txn.status = "returned"
+        Fetch the associated book using txn.book_id
+        Set book.is_available = True
+        db.commit() -> db.refresh(txn)
+
+    Both the transaction update and the book update are saved in one commit.
+
+Step 3 — main.py
+    Serializes the updated transaction using TransactionOut.
+
+Response:
+    HTTP 200 OK
+    {
+      "id": 1,
+      "book_id": 1,
+      "borrower_id": 1,
+      "borrow_date": "2026-05-13",
+      "return_date": "2026-05-20",
+      "status": "returned",
+      "book": { "id": 1, "title": "Clean Code", ..., "is_available": true },
+      "borrower": { "id": 1, "name": "Alice", ... }
+    }
+
+What changed in the database:
+    books table:        row id=1, is_available changed from false to true
+    transactions table: row id=1, return_date set, status changed to "returned"
+
+
+--------------------------------------------------------------------------------
+5.5  SEARCH FLOW
+--------------------------------------------------------------------------------
+
+Client sends:
+    GET http://localhost:8000/search?q=python&category=programming
+
+Step 1 — main.py
+    FastAPI reads q, category, author from the URL query parameters.
+    All three are Optional — if not provided, they default to None.
+    Calls crud.search_books(db, q="python", category="programming", author=None)
+
+Step 2 — crud.py: search_books()
+
+    Starts with base query: SELECT * FROM books
+
+    Since q = "python":
+        Adds WHERE:
+            title LIKE '%python%'   (case-insensitive)
+            OR author LIKE '%python%'
+            OR category LIKE '%python%'
+
+    Since category = "programming":
+        Adds AND category LIKE '%programming%'
+
+    Since author is None:
+        No author filter added.
+
+    Final effective SQL:
+        SELECT * FROM books
+        WHERE (title LIKE '%python%' OR author LIKE '%python%' OR category LIKE '%python%')
+        AND category LIKE '%programming%'
+
+    Returns list of matching Book objects.
+
+Step 3 — main.py
+    Serializes each result using BookOut.
+
+Response:
+    HTTP 200 OK — array of matching books
+    [
+      { "id": 3, "title": "Python Programming", "author": "...",
+        "category": "Programming", "isbn": "...", "is_available": true },
+      { "id": 7, "title": "Learning Python", "author": "...",
+        "category": "Programming", "isbn": "...", "is_available": false }
+    ]
+
+Note: If no parameters are sent (GET /search with no query string), all books
+are returned because no filters are applied.
+
+
+--------------------------------------------------------------------------------
+5.6  DASHBOARD STATS FLOW
+--------------------------------------------------------------------------------
+
+Client sends:
+    GET http://localhost:8000/stats
+
+Step 1 — main.py
+    Calls crud.get_books(db) to fetch all books.
+    Calls crud.get_transactions(db) to fetch all transactions.
+
+    Computes:
+        total_books     = total count of books
+        available_books = count of books where is_available is True
+        borrowed_books  = total_books - available_books
+
+    Gets the 5 most recent transactions by sorting on borrow_date descending
+    and slicing the first 5.
+
+    Builds a custom response dictionary (not a Pydantic schema).
+
+Response:
+    HTTP 200 OK
+    {
+      "total_books": 10,
+      "available_books": 7,
+      "borrowed_books": 3,
+      "recent_transactions": [
+        {
+          "id": 5,
+          "book_title": "Clean Code",
+          "borrower_name": "Alice",
+          "borrow_date": "2026-05-13",
+          "return_date": null,
+          "status": "borrowed"
+        },
+        ...
+      ]
+    }
+
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================
